@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: API pública de anúncios (view `public_listings`)
+  version: 1.0.0
+  description: |
+    Contrato de leitura que a vitrine pública (site estático) usa para listar e abrir anúncios.
+    A vitrine só lê, e apenas por esta view; quem escreve é o painel administrativo.
+
+    **Origem deste documento:** derivado do código do front-end que consome a view. O servidor estava fora
+    do ar quando este contrato foi escrito, então os tipos e campos abaixo refletem o que o front usa, e não
+    uma inspeção do banco. Os exemplos são fictícios.
+servers:
+  - url: https://<SEU-PROJETO>.supabase.co/rest/v1
+    description: Substitua pelo endereço do projeto (PostgREST do Supabase).
+security:
+  - apiKey: []
+    bearer: []
+paths:
+  /public_listings:
+    get:
+      summary: Lista anúncios publicados
+      description: |
+        Devolve os anúncios publicados. A ordem padrão usada pela vitrine põe os destaques primeiro,
+        depois os destaques mais recentes e, por fim, os anúncios mais recentes.
+      operationId: listListings
+      parameters:
+        - name: select
+          in: query
+          description: Colunas a devolver. A vitrine usa `*`.
+          schema: { type: string, default: "*" }
+        - name: order
+          in: query
+          description: Ordenação (sintaxe PostgREST). A vitrine usa `is_featured.desc,featured_at.desc.nullslast,published_at.desc`.
+          schema: { type: string }
+          example: is_featured.desc,featured_at.desc.nullslast,published_at.desc
+        - name: slug
+          in: query
+          description: Filtro de igualdade pelo identificador do anúncio. Use o prefixo `eq.`; é assim que a página de detalhe busca um único anúncio.
+          schema: { type: string }
+          example: eq.jeep-renegade-2020
+      responses:
+        "200":
+          description: Lista de anúncios (vazia se nenhum corresponder).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Listing" }
+        "401":
+          description: Chave de API ausente ou inválida.
+        "404":
+          description: A view não existe ou não está exposta.
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: apikey
+      description: Chave pública (anon) do projeto. É segura no navegador porque o acesso é limitado por regras no banco.
+    bearer:
+      type: http
+      scheme: bearer
+      description: A mesma chave pública, enviada em `Authorization`.
+  schemas:
+    Listing:
+      type: object
+      required: [slug, title, price]
+      properties:
+        slug: { type: string, description: Identificador único, usado na URL do anúncio. }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        price: { type: number, description: Preço em reais (a vitrine formata em BRL, sem centavos). }
+        images:
+          type: array
+          description: Endereços das fotos. A primeira é a capa.
+          items: { type: string, format: uri }
+        is_featured: { type: boolean, description: Anúncio em destaque. }
+        featured_at: { type: string, format: date-time, nullable: true, description: Quando virou destaque. }
+        published_at: { type: string, format: date-time }
+        category_slug: { type: string }
+        category_name: { type: string }
+        parent_category_name: { type: string, nullable: true }
+        whatsapp: { type: string, nullable: true, description: Telefone de contato para o link do WhatsApp. }
+        contact_email: { type: string, nullable: true }
+        attributes:
+          type: array
+          description: Atributos dinâmicos da categoria (por exemplo marca, modelo, ano, câmbio).
+          items: { $ref: "#/components/schemas/Attribute" }
+    Attribute:
+      type: object
+      properties:
+        slug: { type: string, example: ano }
+        name: { type: string, example: Ano }
+        type:
+          type: string
+          description: Tipo do atributo. A vitrine trata `NUMBER` e `PRICE` como números; os demais tipos são exibidos como texto.
+          example: NUMBER
+        value: { type: string, nullable: true }
